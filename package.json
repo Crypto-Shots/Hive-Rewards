@@ -1,10 +1,11 @@
 {
   "name": "hiverewards",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "SDK for analysing HIVE & Hive-Engine earnings",
   "type": "module",
   "scripts": {
     "start": "node src/rewards.js",
+    "test:unit": "node --test src/tests/*.test.js",
     "test:node-rewards": "node src/tests/example-rewards.js",
     "test:cli1-rewards": "node src/rewards.js --inbound dantrin --from chessRewards=karina.gpt --hours 72",
     "test:cli2-rewards": "node src/rewards.js --outbound cryptoshots.tips cryptoshotsdoom karina.gpt --days 7",

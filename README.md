@@ -1,26 +1,22 @@
-
 &nbsp;
 
-📑 **CONTENTS**
-<br>
-- 💸 **[Hive Rewards]()** [usage – NodeJS & Browser](#usage---nodejs--browser)  
-  - [CLI Usage](#usage---cli)  
-  - [Custom Configuration](#configuration)
-<br>
-- 😺 **[Peakd’s Beacon Wrapper](#peakds-beacon-wrapper)** &nbsp;and &nbsp;**[Hive / HiveEngine API Wrappers](#peakds-beacon-wrapper)**
-&nbsp;
-- 😺 **[Usage in Crypto Shots](#usage-in-crypto-shots)**
-<br>
+## Contents
+
+- [Hive Rewards](#hive-rewards)
+- [Usage - NodeJS and Browser](#usage---nodejs-and-browser)
+- [Usage - CLI](#usage---cli)
+- [Configuration](#configuration)
+- [Peakd's Beacon Wrapper](#peakds-beacon-wrapper)
+- [Usage in Crypto Shots](#usage-in-crypto-shots)
 
 -----
 
 # Hive Rewards
 
-An SDK for Node.js and the browser, and a command‑line tool to scan HIVE and Hive‑Engine token transfers:
+An SDK for Node.js and the browser, and a command-line tool to scan HIVE, HBD, and Hive-Engine token transfers:
 
-- **Inbound** — sum HIVE & tokens and USD value received by specified accounts, tracking specific sender accounts.
-- **Outbound** — map all recipients, tokens and USD values sent by a given sender.
-
+- **Inbound** - sum HIVE, HBD, and token rewards plus USD value received by specified accounts, tracking specific sender accounts.
+- **Outbound** - map all recipients plus HIVE, HBD, token, and USD values sent by a given sender.
 
 ---
 
@@ -47,20 +43,17 @@ const outbound = await analyzer.outbounds({
 console.log(outbound);
 ```
 
-
 #### Self-hosted bundle
 
-A bundled build can be generated with Webpack:
+1. Clone the project.
+2. Build it with:
 
-1. Clone the project
-
-2. Build it with
 ```bash
-npm run build:web        # outputs dist/hiverewards.bundle.js
+npm run build:web
 ```
 
-3. Host the generated dist folder on your server
-4. Import it in your frontend and use it this way:
+3. Host the generated `dist` folder on your server.
+4. Import it in your frontend:
 
 ```html
 <script src="dist/hiverewards.bundle.js"></script>
@@ -76,6 +69,7 @@ npm run build:web        # outputs dist/hiverewards.bundle.js
   })();
 </script>
 ```
+
 -----
 
 ## Usage - CLI
@@ -89,34 +83,27 @@ npm install
 ```bash
 npm start -- --inbound obifenom zillionz --from pvpRewards=cryptoshots.tips pveRewards=cryptoshotsdoom --hours 24
 ```
-<center>
 
 ![](./DOCS/images/Inbound.PNG)
-
-</center>
 
 ```bash
 npm start -- --outbound cryptoshots.tips karina.gpt --days 1
 ```
 
-<center>
-
 ![](./DOCS/images/Outbound.PNG)
 
-</center>
-
-Note: append `--verbose` for verbose logging
+Append `--verbose` for verbose logging.
 
 -----
 
 ## Configuration
 
-| Env var                       | Default                                                        |
-|-------------------------------|----------------------------------------------------------------|
-| `HIVE_PRICE_URL`              | `https://api.coingecko.com/api/v3/simple/price?ids=hive&vs_currencies=usd` |
+| Env var | Default |
+|---|---|
+| `HIVE_PRICE_URL` | `https://api.coingecko.com/api/v3/simple/price?ids=hive,hive_dollar&vs_currencies=usd` |
 
-You can also override the initial Hive / Hive Engine node by passing a config object to the `hiveRewards()` factory in code.
-eg.
+You can also override the initial Hive / Hive Engine node by passing a config object to the `hiveRewards()` factory in code:
+
 ```js
 const analyzer = await hiveRewards({
   hiveNodeUrl: 'https://your.hive.node',
@@ -125,20 +112,17 @@ const analyzer = await hiveRewards({
 });
 ```
 
-**Other Overrides:**
+### Other Overrides
 
 | Constructor Attribute | Description | Default |
-|-------------------------------|---------------------------|-----------------------------|
-| fetch             | Fetch API implementation |                       `npm cross-fetch`|
-| hiveJs            | pass in another @hiveio/hive-js version, if needed |   v2 |
-| log               | custom logger |                                         console |
-| apiCallsDelay     | default wait time for api call retries |                500 (with exp backoff) |
-| priceCacheMins    | how long Hive price is cached for |                     10 mins |
-| hiveHistoryLimit  | page size (max account‐history ops per call) |          500 |
-| heHistoryLimit    | page size (max Hive-Engine history records per call)  |          250 |
-
-
-<br>
+|---|---|---|
+| `fetch` | Fetch API implementation | `npm cross-fetch` |
+| `hiveJs` | Pass in another `@hiveio/hive-js` version if needed | `v2` |
+| `log` | Custom logger | `console` |
+| `apiCallsDelay` | Default wait time for API call retries | `500` |
+| `priceCacheMins` | How long Hive/HBD prices are cached for | `10 mins` |
+| `hiveHistoryLimit` | Max account-history ops per Hive call | `500` |
+| `heHistoryLimit` | Max Hive-Engine history records per call | `250` |
 
 ---
 
@@ -156,12 +140,10 @@ const hiveUrl = await getHealthyHiveNode();
 const heUrl = await getHealthyHeNode();
 const hehUrl = await getHealthyHeHistoryNode();
 
-// Now you can configure your client:
 hiveApi.api.setOptions({ url: hiveUrl });
 ```
 
-...our use our Hive / Hive Engine **client wrappers** that automatically rotate healthy nodes:
-
+You can also use the Hive / Hive Engine client wrappers that automatically rotate healthy nodes:
 
 ```js
 import { healthyApisWrapper } from 'hiverewards';
@@ -173,42 +155,37 @@ console.log(history);
 
 const metrics = await hiveEngineApiCall({
   jsonrpc: '2.0',
-  method:  'find',
+  method: 'find',
   params: {
     contract: 'market',
-    table:    'metrics',
-    query:    { symbol: 'DOOM' },
-    limit:    1,
-    offset:   0
+    table: 'metrics',
+    query: { symbol: 'DOOM' },
+    limit: 1,
+    offset: 0,
   },
-  id: 1
+  id: 1,
 });
 console.log(metrics);
 
-const history = await hiveEngineHistoryApiCall('cryptoshotstips', 20);
-console.log(history);
+const heHistory = await hiveEngineHistoryApiCall('cryptoshotstips', 20);
+console.log(heHistory);
 ```
-
-<br>
 
 ---
 
-## Usage in CRYPTO SHOTS
+## Usage in Crypto Shots
 
 **[DISCORD](https://crypto-shots.com/discord):**
-- Earnings report for Daily Tournaments
-- Weekly/monthly Top Earners leaderboard
+
+- Earnings report for daily tournaments
+- Weekly/monthly top earners leaderboard
 
 ![](./DOCS/images/UsageCS.png)
 
 ---
 
-<br>
-
 ## Support us
 
-- #### [VOTE](https://vote.hive.uno/@crypto-shots) for our witness 🙇‍♂️
-- Use the [Issues](https://github.com/Crypto-Shots/Hive-Rewards/issues) tab to report bugs.
-- Create [Merge Requests](https://github.com/Crypto-Shots/Hive-Rewards/pulls) for potential improvements and fixes.
-
-<br>
+- [VOTE](https://vote.hive.uno/@crypto-shots) for our witness
+- Use the [Issues](https://github.com/Crypto-Shots/Hive-Rewards/issues) tab to report bugs
+- Create [Merge Requests](https://github.com/Crypto-Shots/Hive-Rewards/pulls) for improvements and fixes
