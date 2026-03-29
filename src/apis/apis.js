@@ -69,16 +69,29 @@ export class HivePriceProvider {
     this.#memo = null;
   }
 
-  getHiveUsd = async () => withRetries(async () => {
+  #getPrices = async () => withRetries(async () => {
     const now = Date.now();
     if (this.#memo && ((now - this.#memo.ts) < this.#cacheMs)) {
       return this.#memo.val;
     }
     const data = await fetchRetry(this.#fetch, this.#url).then(r => r.json());
-    const val = data?.hive?.usd;
-    if (val) {
+    const val = {
+      hive: data?.hive?.usd ?? 0,
+      hbd: data?.hive_dollar?.usd ?? 0,
+    };
+    if (val.hive || val.hbd) {
       this.#memo = { ts: now, val };
     }
-    return val ?? 0;
+    return val;
   });
+
+  getHiveUsd = async () => {
+    const { hive = 0 } = await this.#getPrices();
+    return hive;
+  };
+
+  getHbdUsd = async () => {
+    const { hbd = 0 } = await this.#getPrices();
+    return hbd;
+  };
 }

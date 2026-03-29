@@ -1,5 +1,9 @@
 import { HiveApi, HivePriceProvider, HiveEngineApi } from '../apis/apis.js';
 import { HiveEarningsService, TokenEarningsService } from './analyzers.js';
+import {
+  buildInboundHiveResult,
+  buildOutboundHiveRecipient,
+} from './hiveAssetSummary.js';
 
 /* -------------------------------------------------------------------------- */
 /* Orchestrator                                                               */
@@ -36,10 +40,11 @@ export class EarningsAnalyzer {
     const ts = setInterval(() => process.stdout.write('.'), 3000);
     const start = Date.now();
 
-    const [hiveResult, tokensResult, hiveUsd] = await Promise.all([
+    const [hiveResult, tokensResult, hiveUsd, hbdUsd] = await Promise.all([
       this.#hiveSvc.analyzeInbound(account, since),
       this.#tokSvc.analyzeInbound(account, since),
       this.#priceProv.getHiveUsd(),
+      this.#priceProv.getHbdUsd(),
     ]);
 
     clearInterval(ts);
@@ -49,11 +54,7 @@ export class EarningsAnalyzer {
     );
 
     return {
-      hive: {
-        ...hiveResult,
-        hiveUsd: +hiveUsd.toFixed(4),
-        totUsd: +(hiveResult.totHiveSent * hiveUsd).toFixed(2),
-      },
+      hive: buildInboundHiveResult({ hiveResult, hiveUsd, hbdUsd }),
       tokens: tokensResult,
     };
   };
@@ -175,7 +176,17 @@ export class EarningsAnalyzer {
         const start = Date.now();
 
         const [
-          { perRecipient: hiveMap, perRecipientTxCount: hiveCountMap }, { perRecipient: tokMap, perRecipientTxCount: tokenCountMap, perRecipientSymbolTxCount: tokenSymbolCountMap },
+          {
+            perRecipient: hiveMap,
+            perRecipientTxCount: hiveCountMap,
+            perRecipientHbd: hbdMap,
+            perRecipientHbdTxCount: hbdCountMap,
+          },
+          {
+            perRecipient: tokMap,
+            perRecipientTxCount: tokenCountMap,
+            perRecipientSymbolTxCount: tokenSymbolCountMap,
+          },
         ] = await Promise.all([
           this.#hiveSvc.analyzeOutbound(sender, since),
           this.#tokSvc.analyzeOutbound(sender, since),
@@ -187,19 +198,22 @@ export class EarningsAnalyzer {
           `\n[HR] [outbounds] ${sender}'s scans completed in ${durationMinutes} mins`
         );
 
-        if (!Object.keys(hiveMap).length && !Object.keys(tokMap).length) {
+        if (!Object.keys(hiveMap).length && !Object.keys(hbdMap).length && !Object.keys(tokMap).length) {
           out.senders = {
             ...out.senders,
             [sender]: {
               recipients: {},
-              message: 'No Hive/tokens outbound transfers found',
+              message: 'No HIVE/HBD/tokens outbound transfers found',
             },
           };
           continue;
         }
 
         this.#cfg.verbose && this.#cfg.log.debug('[HR] [outbounds] fetching prices...');
-        const hiveUsd = await this.#priceProv.getHiveUsd();
+        const [hiveUsd, hbdUsd] = await Promise.all([
+          this.#priceProv.getHiveUsd(),
+          this.#priceProv.getHbdUsd(),
+        ]);
 
         const recipients = {};
         const cache = new Map();
@@ -212,25 +226,45 @@ export class EarningsAnalyzer {
 
         for (const [user, amt] of Object.entries(hiveMap)) {
           recipients[user] = {
-            hive: {
+            hive: buildOutboundHiveRecipient({
               totHive: amt,
-              hiveUsd: +hiveUsd.toFixed(4),
-              totUsd: +(amt * hiveUsd).toFixed(2),
-              transactions: hiveCountMap[user] || 0,
-            },
+              totHbd: hbdMap[user] || 0,
+              hiveUsd,
+              hbdUsd,
+              hiveTransactions: hiveCountMap[user] || 0,
+              hbdTransactions: hbdCountMap[user] || 0,
+            }),
             tokens: { breakdown: {}, totUsd: 0, transactions: 0 },
           };
+        }
+
+        for (const [user, amt] of Object.entries(hbdMap)) {
+          if (!recipients[user]) {
+            recipients[user] = {
+              hive: buildOutboundHiveRecipient({
+                totHive: hiveMap[user] || 0,
+                totHbd: amt,
+                hiveUsd,
+                hbdUsd,
+                hiveTransactions: hiveCountMap[user] || 0,
+                hbdTransactions: hbdCountMap[user] || 0,
+              }),
+              tokens: { breakdown: {}, totUsd: 0, transactions: 0 },
+            };
+          }
         }
 
         for (const [user, bag] of Object.entries(tokMap)) {
           if (!recipients[user]) {
             recipients[user] = {
-              hive: {
-                totHive: 0,
-                hiveUsd: +hiveUsd.toFixed(4),
-                totUsd: 0,
-                transactions: 0,
-              },
+              hive: buildOutboundHiveRecipient({
+                totHive: hiveMap[user] || 0,
+                totHbd: hbdMap[user] || 0,
+                hiveUsd,
+                hbdUsd,
+                hiveTransactions: hiveCountMap[user] || 0,
+                hbdTransactions: hbdCountMap[user] || 0,
+              }),
               tokens: {
                 breakdown: {},
                 totUsd: 0,
@@ -264,6 +298,11 @@ export class EarningsAnalyzer {
           totUsdSentInHive += amt * hiveUsd;
         }
 
+        let totUsdSentInHbd = 0;
+        for (const amt of Object.values(hbdMap)) {
+          totUsdSentInHbd += amt * hbdUsd;
+        }
+
         let totUsdSentInTokens = 0;
         for (const bag of Object.values(tokMap)) {
           for (const [sym, amt] of Object.entries(bag)) {
@@ -278,8 +317,14 @@ export class EarningsAnalyzer {
             recipients: sortedRecipients,
             stats: {
               totHiveTransactions: Object.values(hiveCountMap).reduce((aa, bb) => aa + bb, 0),
+              totHbdTransactions: Object.values(hbdCountMap).reduce((aa, bb) => aa + bb, 0),
+              totHiveChainTransactions:
+                Object.values(hiveCountMap).reduce((aa, bb) => aa + bb, 0) +
+                Object.values(hbdCountMap).reduce((aa, bb) => aa + bb, 0),
               totTokensTransactions: Object.values(tokenCountMap).reduce((aa, bb) => aa + bb, 0),
               totUsdSentInHive: +totUsdSentInHive.toFixed(2),
+              totUsdSentInHbd: +totUsdSentInHbd.toFixed(2),
+              totUsdSentOnHiveChain: +(totUsdSentInHive + totUsdSentInHbd).toFixed(2),
               totUsdSentInTokens: +totUsdSentInTokens.toFixed(2),
             },
           },

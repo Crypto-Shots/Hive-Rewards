@@ -1,4 +1,5 @@
 import { camelFromEnum, sleep, withRetries } from '../utils/utils.js';
+import { createHiveBreakdown, parseHiveTransferAmount } from './hiveAssetSummary.js';
 
 /* -------------------------------------------------------------------------- */
 /* Domain services                                                            */
@@ -19,13 +20,14 @@ export class HiveEarningsService {
     } = this.#cfg;
     verbose && log.debug('[HR] [analyzeInbound] (Hive)', { username, sinceTs });
     const senderAccounts = Object.values(hiveSenders);
-    const breakdown = Object.fromEntries(
-      Object.keys(hiveSenders).map(key => [
-        camelFromEnum(key),
-        { tot: 0, transactions: 0 },
-      ])
+    const breakdown = createHiveBreakdown(
+      Object.fromEntries(
+        Object.keys(hiveSenders).map(key => [camelFromEnum(key), hiveSenders[key]])
+      )
     );
     let totHiveSent = 0;
+    let totHbdSent = 0;
+    let totHbdTransactions = 0;
     let more = true;
     let start = -1;
 
@@ -45,20 +47,28 @@ export class HiveEarningsService {
           break;
         }
 
+        const parsedAmount = parseHiveTransferAmount(opData.amount);
         const inbound = opData.to === username &&
           senderAccounts.includes(opData.from) &&
           opName === 'transfer' &&
-          opData.amount?.endsWith(' HIVE');
+          parsedAmount;
 
         if (inbound) {
-          const amt = parseFloat(opData.amount);
-          totHiveSent += amt;
+          const { asset, value: amt } = parsedAmount;
           const category = camelFromEnum(
             Object.entries(hiveSenders).find(([, val]) => val === opData.from)[0]
           );
-          breakdown[category].tot += amt;
-          breakdown[category].transactions += 1;
-          verbose && log.debug('[HR] [HIVE-IN]', { idx, ts, amt, category });
+          breakdown[category].assets[asset].tot += amt;
+          breakdown[category].assets[asset].transactions += 1;
+          if (asset === 'HIVE') {
+            totHiveSent += amt;
+            breakdown[category].tot += amt;
+            breakdown[category].transactions += 1;
+          } else if (asset === 'HBD') {
+            totHbdSent += amt;
+            totHbdTransactions += 1;
+          }
+          verbose && log.debug(`[HR] [${asset}-IN]`, { idx, ts, amt, category });
         }
       }
 
@@ -72,7 +82,14 @@ export class HiveEarningsService {
       0
     );
 
-    return { totHiveSent, breakdown, totHiveTransactions };
+    return {
+      totHiveSent,
+      totHbdSent,
+      breakdown,
+      totHiveTransactions,
+      totHbdTransactions,
+      totHiveChainTransactions: totHiveTransactions + totHbdTransactions,
+    };
   };
 
   analyzeOutbound = async (sender, sinceTs) => {
@@ -82,6 +99,8 @@ export class HiveEarningsService {
     const ignored = ignoredReceivers;
     const perRecipient = {};
     const perRecipientTxCount = {};
+    const perRecipientHbd = {};
+    const perRecipientHbdTxCount = {};
     let more = true;
     let start = -1;
     verbose && log.debug('[HR] [analyzeOutbound] (Hive)', { sender, sinceTs });
@@ -102,18 +121,24 @@ export class HiveEarningsService {
           break;
         }
 
+        const parsedAmount = parseHiveTransferAmount(opData.amount);
         const outbound = opData.from === sender &&
           opName === 'transfer' &&
-          opData.amount?.endsWith(' HIVE');
+          parsedAmount;
 
         const shouldIgnore = opData.from === opData.to
           || ignored.includes(opData.to);
 
         if (outbound && !shouldIgnore) {
-          const amt = parseFloat(opData.amount);
-          perRecipient[opData.to] = (perRecipient[opData.to] ?? 0) + amt;
-          perRecipientTxCount[opData.to] = (perRecipientTxCount[opData.to] ?? 0) + 1;
-          verbose && log.debug('[HR] [HIVE-OUT]', { to: opData.to, amt });
+          const { asset, value: amt } = parsedAmount;
+          if (asset === 'HIVE') {
+            perRecipient[opData.to] = (perRecipient[opData.to] ?? 0) + amt;
+            perRecipientTxCount[opData.to] = (perRecipientTxCount[opData.to] ?? 0) + 1;
+          } else if (asset === 'HBD') {
+            perRecipientHbd[opData.to] = (perRecipientHbd[opData.to] ?? 0) + amt;
+            perRecipientHbdTxCount[opData.to] = (perRecipientHbdTxCount[opData.to] ?? 0) + 1;
+          }
+          verbose && log.debug(`[HR] [${asset}-OUT]`, { to: opData.to, amt });
         }
       }
 
@@ -122,7 +147,12 @@ export class HiveEarningsService {
       await sleep(apiCallsDelay);
     }
 
-    return { perRecipient, perRecipientTxCount };
+    return {
+      perRecipient,
+      perRecipientTxCount,
+      perRecipientHbd,
+      perRecipientHbdTxCount,
+    };
   };
 }
 
