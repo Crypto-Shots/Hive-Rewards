@@ -1,5 +1,16 @@
 # Repository Notes
 
+## Critical Root Docs Rule
+
+Keeping these two root docs up to date is critical:
+
+- `E:\CODE\CS\AGENTS.md`
+- `E:\CODE\CS\PVP_LAYERS.md`
+
+If work in this repo changes architecture assumptions, rewards tracking responsibilities, or the way the broader Crypto Shots system should be understood, update the affected root doc or docs in the same change.
+
+If either root doc is missing or unreachable, notify the user immediately.
+
 ## Purpose
 
 - `hiverewards` is a Node/browser SDK and CLI for analyzing inbound and outbound rewards on Hive.
@@ -16,6 +27,7 @@
 
 - Preserve backward compatibility for existing HIVE fields when adding new assets or totals.
 - When reward analysis behavior changes, update `README.md` in the same change.
+- When broader architecture/rewards-layer understanding changes, update the required root docs in the same change.
 - Prefer deterministic unit tests over live-chain example scripts for new coverage.
 - Do not remove the example scripts in `src/tests/`; they are still useful for manual verification.
 
